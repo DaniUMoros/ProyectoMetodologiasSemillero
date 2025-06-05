@@ -18,6 +18,25 @@ class GrupoService:
         params = (grupo.nombre, grupo.campo, grupo.identificador, grupo.director)
 
         return self.db.execute_query(query, params)
+    
+    def obtener_semilleros(self):
+        """Obtiene todos los grupos de investigación"""
+        query = "SELECT id, nombre, objetivo_principal, objetivos_especificos, status FROM semilleros ORDER BY nombre"
+        resultados = self.db.execute_query(query, fetch='all')
+
+        grupos = []
+        for resultado in resultados:
+            grupo = Grupo(
+                id=resultado['id'],
+                nombre=resultado['nombre'],
+                campo=resultado['objetivo_principal'],
+                identificador=resultado['objetivos_especificos'],
+                status=resultado['status']
+            )
+            grupos.append(grupo)
+        return grupos
+
+        
 
     def obtener_todos(self):
         """Obtiene todos los grupos de investigación"""
@@ -57,6 +76,28 @@ class GrupoService:
             return grupo
 
         return None
+    
+    def obtener_por_identificador(self, identificador):
+        """Obtiene un grupo de investigación por su identificador único"""
+        query = """
+            SELECT g.id, g.nombre, g.campo, g.identificador, g.director
+            FROM grupos_investigacion g
+            WHERE g.identificador = ?
+        """
+        resultado = self.db.execute_query(query, (identificador,), fetch='one')
+
+        if resultado:
+            grupo = Grupo(
+                id=resultado['id'],
+                nombre=resultado['nombre'],
+                campo=resultado['campo'],
+                identificador=resultado['identificador'],
+                director=resultado['director']
+            )
+            return grupo
+
+        return None
+
 
     def cargar_datos_iniciales(self):
         """Carga los datos iniciales de grupos de investigación si no existen"""

@@ -12,9 +12,15 @@ class Database:
         self._crear_estructura()
         self._verificar_estructura()  # Añadimos verificación adicional
 
+    def _get_connection(self):
+        """Abre la conexión y activa claves foráneas."""
+        conn = sqlite3.connect(self.db_path)   # ← conexión directa, no recurse aquí
+        conn.execute("PRAGMA foreign_keys = ON;")
+        return conn
+
     def _crear_estructura(self):
         """Crea la estructura de la base de datos si no existe"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         cursor = conn.cursor()
 
         # Tabla de grupos de investigación
@@ -23,14 +29,17 @@ class Database:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT NOT NULL,
             facultad TEXT,
-            area_conocimiento TEXT
+            area_conocimiento TEXT,
+            director TEXT,
+            campo TEXT,
+            identificador TEXT
         )
         ''')
 
         # Tabla de semilleros
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS semilleros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            semillero_id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT NOT NULL,
             objetivo_principal TEXT,
             objetivos_especificos TEXT,
@@ -48,8 +57,10 @@ class Database:
             tipo TEXT NOT NULL,
             identificacion TEXT,
             programa TEXT,
-            email TEXT
-        )
+            email TEXT,
+            semillero_id INTEGER,
+            FOREIGN KEY (semillero_id) REFERENCES semilleros(semillero_id)
+        );       
         ''')
 
         # Tabla de relación entre semilleros e investigadores
@@ -59,7 +70,7 @@ class Database:
             investigador_id INTEGER,
             rol TEXT,
             PRIMARY KEY (semillero_id, investigador_id),
-            FOREIGN KEY (semillero_id) REFERENCES semilleros(id),
+            FOREIGN KEY (semillero_id) REFERENCES semilleros(semillero_id),
             FOREIGN KEY (investigador_id) REFERENCES investigadores(id)
         )
         ''')
@@ -74,7 +85,7 @@ class Database:
             semillero_id INTEGER NOT NULL,
             fecha_entrega TEXT,
             estado TEXT DEFAULT 'pendiente',
-            FOREIGN KEY (semillero_id) REFERENCES semilleros(id)
+            FOREIGN KEY (semillero_id) REFERENCES semilleros(semillero_id)
         )
         ''')
 
@@ -83,7 +94,7 @@ class Database:
 
     def _verificar_estructura(self):
         """Verifica y actualiza la estructura de la base de datos si es necesario"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         cursor = conn.cursor()
 
         # Verificar si existe la columna objetivo_principal en la tabla semilleros
@@ -112,7 +123,7 @@ class Database:
                 Returns:
                     Resultados de la consulta según el parámetro fetch
                 """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row  # Para poder acceder por nombre de columna
         cursor = conn.cursor()
 
@@ -168,7 +179,7 @@ class Database:
             query (str): Consulta SQL a ejecutar
             params_list (list): Lista de tuplas con parámetros
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         cursor = conn.cursor()
 
         cursor.executemany(query, params_list)

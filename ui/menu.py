@@ -5,6 +5,8 @@ from ui.prompts import (
 )
 from models.semillero import Semillero
 from models.entregable import Entregable
+import time
+import json
 
 
 class Menu:
@@ -66,8 +68,9 @@ class Menu:
             print("1. Crear nuevo semillero")
             print("2. Ver todos los semilleros")
             print("3. Buscar semillero")
-            print("4. Asignar entregable a semillero")
-            print("5. Ver entregable de semillero")
+            print("4. Asignar semillero a grupo investigador")
+            print("5. Asignar entregable a semillero")
+            print("6. Ver entregable de semillero")
             print("0. Volver al menú principal")
             print("=" * 45)
 
@@ -80,13 +83,16 @@ class Menu:
             elif opcion == "3":
                 self._ver_detalles_semillero()
             elif opcion == "4":
-                self._asignar_entregable()
+                self._asignar_semillero()
             elif opcion == "5":
+                self._asignar_entregable()    
+            elif opcion == "6":
                 self._ver_entregable_semillero()
             elif opcion == "0":
                 break
             else:
                 print("Opción no válida. Intente de nuevo.")
+    
 
     def _listar_grupos(self):
         """Muestra la lista de todos los grupos disponibles"""
@@ -139,13 +145,227 @@ class Menu:
             grupo = self.grupo_service.obtener_por_id(semillero.grupo_id)
             grupo_nombre = grupo.nombre if grupo else "Grupo no encontrado"
 
-            estado = semillero.status.upper()
+            estado = semillero.status.upper()   
             print(f"{semillero.id:<5} {semillero.nombre:<30} {estado:<10} {grupo_nombre:<20}")
 
         print("-" * 70)
         print(f"Total de semilleros: {len(semilleros_validos)}")
+        respuesta = input("\nSi desea eliminar un semillero presione 'D',\n Si desea Editar un semillero Precione 'E'\n de lo contrario presione Enter para continuar: ").strip().lower()
+
+
+        # Si elige Enter, no hace nada y regresa
+        if respuesta == "":
+            print("No se realizó ninguna acción.")
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # Validar que la opción sea 'd' o 'e'
+        if respuesta not in ('d', 'e'):
+            print("Opción inválida. Solo 'D' para eliminar, 'E' para editar o Enter para cancelar.")
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # Pedir el ID del semillero a procesar
+        id_texto = input("Digite el identificador del semillero: ").strip()
+        try:
+            sem_id = int(id_texto)
+        except ValueError:
+            print("Debe ingresar un número válido.")
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # Verificar que exista en semilleros_validos
+        sem_obj = None
+        for s in semilleros_validos:
+            if s.id == sem_id:
+                sem_obj = s
+                break
+
+        if sem_obj is None:
+            print(f"No existe ningún semillero con ID = {sem_id}.")
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # Si la opción es 'd' → ELIMINAR
+        if respuesta == 'd':
+            confirmar_del = input(
+                f"¿Está seguro de que desea eliminar el semillero "
+                f"'{sem_obj.nombre}' (ID {sem_id})? (S/N): "
+            ).strip().lower()
+            if confirmar_del != 's':
+                print("Eliminación cancelada.")
+                input("\nPresione Enter para continuar...")
+                return True
+
+            print("Procediendo a eliminar el semillero...")
+            exito = self.semillero_service.eliminar_semillero(sem_id)
+            if not exito:
+                print("No se eliminó ningún semillero.")
+            else:
+                print(f"El semillero '{sem_obj.nombre}' (ID {sem_id}) fue eliminado correctamente.")
+
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # Si la opción es 'e' → EDITAR
+        if respuesta == 'e':
+            print(f"\n=== EDITAR SEMILLERO (ID {sem_id}) ===")
+            print("Si deja un campo vacío, se mantendrá el valor anterior.\n")
+
+            # 1) Nuevo nombre
+            nuevo_nombre = input(f"Nuevo nombre (actual: '{sem_obj.nombre}'): ").strip()
+            if nuevo_nombre == "":
+                nuevo_nombre = sem_obj.nombre
+
+            # 2) Nuevo objetivo principal
+            nuevo_objetivo_principal = input(
+                f"Nuevo objetivo principal (actual: '{sem_obj.objetivo_principal}'): "
+            ).strip()
+            if nuevo_objetivo_principal == "":
+                nuevo_objetivo_principal = sem_obj.objetivo_principal
+
+            # 3) Nuevos objetivos específicos (JSON)
+            objetivos_actuales_json = json.dumps(sem_obj.objetivos_especificos)
+            nuevos_objetivos_input = input(
+                f"Nuevos objetivos específicos en JSON (actual: {objetivos_actuales_json}): "
+            ).strip()
+            if nuevos_objetivos_input == "":
+                objetivos_json = objetivos_actuales_json
+            else:
+                try:
+                    # Validar que sea JSON válido
+                    lista_obj = json.loads(nuevos_objetivos_input)
+                    objetivos_json = nuevos_objetivos_input
+                except Exception:
+                    print("JSON inválido para objetivos específicos. Se mantendrán los anteriores.")
+                    objetivos_json = objetivos_actuales_json
+
+            # 4) Nuevo grupo (ID)
+            grupo_actual = sem_obj.grupo_id
+            nuevo_grupo_input = input(f"Nuevo grupo_id (actual: {grupo_actual}): ").strip()
+            if nuevo_grupo_input == "":
+                grupo_id_final = grupo_actual
+            else:
+                try:
+                    posible_grupo = int(nuevo_grupo_input)
+                    # Validar que el grupo exista
+                    if not self.grupo_service.obtener_por_id(posible_grupo):
+                        print(f"Grupo con ID {posible_grupo} no existe. Se mantiene el anterior ({grupo_actual}).")
+                        grupo_id_final = grupo_actual
+                    else:
+                        grupo_id_final = posible_grupo
+                except ValueError:
+                    print("ID de grupo inválido. Se mantiene el anterior.")
+                    grupo_id_final = grupo_actual
+
+            # 5) Nuevo status
+            status_actual = sem_obj.status
+            nuevo_status_input = input(f"Nuevo status (actual: '{status_actual}'): ").strip().lower()
+            if nuevo_status_input == "":
+                status_final = status_actual
+            else:
+                if nuevo_status_input not in ("activo", "pendiente"):
+                    print("Status inválido. Se mantiene el anterior.")
+                    status_final = status_actual
+                else:
+                    status_final = nuevo_status_input
+
+            # 6) Llamar al servicio para editar
+            print("\nGuardando cambios...")
+            try:
+                exito_editar = self.semillero_service.editar_semillero(
+                    sem_id,
+                    nuevo_nombre,
+                    nuevo_objetivo_principal,
+                    json.loads(objetivos_json),
+                    grupo_id_final,
+                    status_final
+                )
+            except Exception as e:
+                print(f"Error interno al intentar editar: {e}")
+                exito_editar = False
+
+            if exito_editar:
+                print("Semillero actualizado correctamente.")
+            else:
+                print("No se pudo actualizar el semillero.")
+
+            input("\nPresione Enter para continuar...")
+            return True
+
+        # (No hace falta otro else, porque ya cubrimos '', 'd' y 'e')
         input("\nPresione Enter para continuar...")
         return True
+    
+    def _eliminar_semillero(self):
+        """ Permite al usuario seleccionar un semillero (por ID) y eliminarlo """
+        semilleros = self.semillero_service.obtener_todos()
+        if not semilleros:
+            print("\nNo hay semilleros registrados en el sistema.")
+            input("\nPresione Enter para continuar...")
+            return False
+
+        # (Opcional) Solo mostrar semilleros activos/pendientes. Si quieres listar
+        # todos, comenta la siguiente línea:
+        semilleros = [s for s in semilleros if s.status in ["activo", "pendiente"]]
+
+        if not semilleros:
+            print("\nNo hay semilleros activos o pendientes para eliminar.")
+            input("\nPresione Enter para continuar...")
+            return False
+
+        # Mostrar tabla con semilleros y su ID
+        print("\n=== ELIMINAR SEMILLERO ===")
+        print(f"{'ID':<5} {'NOMBRE':<30} {'ESTADO':<10} {'GRUPO':<20}")
+        print("-" * 70)
+        for sem in semilleros:
+            grupo = self.grupo_service.obtener_por_id(sem.grupo_id)
+            grupo_nombre = grupo.nombre if grupo else "Grupo no encontrado"
+            estado = sem.status.upper()
+            print(f"{sem.semillero_id:<5} {sem.nombre:<30} {estado:<10} {grupo_nombre:<20}")
+        print("-" * 70)
+
+        # Pedir al usuario el ID a eliminar (o Enter para volver)
+        seleccionado = input("\nSeleccione un semillero para eliminar o presione Enter para volver al menú principal: ").strip()
+        if seleccionado == '':
+            # El usuario decidió no borrar nada
+            return False
+
+        # Validar que exista un número entero
+        try:
+            sem_id = int(seleccionado)
+        except ValueError:
+            print("Debe ingresar un número válido.")
+            input("\nPresione Enter para continuar...")
+            return False
+
+        # Verificar que el ID exista en la lista
+        semillero_obj = None
+        for s in semilleros:
+            if s.id == sem_id:
+                semillero_obj = s
+                break
+
+        if semillero_obj is None:
+            print(f"No existe ningún semillero con ID = {sem_id}.")
+            input("\nPresione Enter para continuar...")
+            return False
+
+        # Pedir confirmación
+        confirmar = input(f"¿Está seguro de que desea eliminar el semillero '{semillero_obj.nombre}' (ID {sem_id})? (S/N): ").strip().lower()
+        if confirmar != 's':
+            print("Operación cancelada.")
+            input("\nPresione Enter para continuar...")
+            return False
+
+        # Llamar al servicio para eliminar
+        exito = self.semillero_service.eliminar_semillero(sem_id)
+        if exito:
+            print(f"El semillero '{semillero_obj.nombre}' (ID {sem_id}) fue eliminado correctamente.")
+        else:
+            print(f"Ocurrió un error al intentar eliminar el semillero con ID {sem_id}.")
+        input("\nPresione Enter para continuar...")
+        return exito
 
     def _ver_detalles_semillero(self):
         """Permite seleccionar y ver los detalles de un semillero"""
@@ -237,6 +457,44 @@ class Menu:
                 else:
                     print("Error al actualizar el estado del semillero")
 
+
+    def _asignar_semillero(self):
+        grupos = self.grupo_service.obtener_todos()
+        print("--->ESTOS SON LOS GRUPOS DISPONIBLES<---")
+        for g in grupos:
+         print(
+        f"Grupo #{g.id}:\n"
+        f"  • Nombre:           {g.nombre}\n"
+        f"  • Identificador   :{g.identificador}\n"
+        f"  • Campo:            {g.campo}\n"
+        f"  • Director:         {g.director}\n"
+         )
+
+        while True:
+            try:
+                grupo_identificador = input("Ingrese el Identificador del grupo al que desea asignar un semillero: ")
+                grupo = self.grupo_service.obtener_por_identificador(grupo_identificador)
+                print(f"\nBuscando grupo con identificador: {grupo_identificador}")
+                if not grupo_identificador:
+                    print("Identificador no puede estar vacío. Intente de nuevo.")
+                    continue
+                if grupo:
+                    print(f"\nGrupo seleccionado: (Nombre: {grupo.nombre} ID: {grupo.id})")
+                    print("Ahora Selecciona el semillero que desea asignar al grupo")
+                    time.sleep(4)
+                    semilleros = self.grupo_service.obtener_semilleros()
+                    if not semilleros:
+                        print("\nNo hay semilleros registrados.")
+                        input("\nPresione Enter para continuar...")
+                        return  
+                    break
+                else:
+                    print("Grupo no encontrado. Intente de nuevo.")
+            except ValueError:
+                print("ID inválido. Intente de nuevo.")
+
+  
+    
     def _asignar_entregable(self):
         """Asigna un entregable a un semillero"""
         semilleros = self.semillero_service.obtener_todos()

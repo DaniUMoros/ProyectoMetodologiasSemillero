@@ -88,6 +88,99 @@ class SemilleroService:
 
         if params_list:
             self.db.execute_many(query, params_list)
+    
+    # services/semillero_service.py
+
+
+
+
+
+    # ... tus otros métodos (obtener_todos, crear_semillero, eliminar_semillero, etc.) ...
+
+    def editar_semillero(self, semillero_id, nombre, objetivo_principal, objetivos_especificos, grupo_id, status):
+        """
+        Actualiza los campos de un semillero existente en la base de datos.
+        - semillero_id (int): ID del semillero a actualizar.
+        - nombre (str): nuevo nombre.
+        - objetivo_principal (str): nuevo objetivo principal.
+        - objetivos_especificos (list): nueva lista de objetivos específicos.
+        - grupo_id (int): nuevo grupo asignado.
+        - status (str): nuevo estado ("activo" o "pendiente", por ejemplo).
+
+        Retorna True si se actualizó al menos una fila, False en caso contrario.
+        """
+        # Convertir la lista de objetivos a JSON
+        objetivos_json = json.dumps(objetivos_especificos)
+
+        query = """
+            UPDATE semilleros
+            SET nombre = ?,
+                objetivo_principal = ?,
+                objetivos_especificos = ?,
+                grupo_id = ?,
+                status = ?
+            WHERE semillero_id = ?;
+        """
+        params = (
+            nombre,
+            objetivo_principal,
+            objetivos_json,
+            grupo_id,
+            status,
+            semillero_id
+        )
+        try:
+            filas_afectadas = self.db.execute_query(query, params)
+            return (filas_afectadas > 0)
+        except Exception as e:
+            print(f"Error al editar el semillero: {e}")
+            return False
+
+    
+    def eliminar_semillero(self, semillero_id):
+        """
+        Borra de la base de datos el semillero cuyo semillero_id fue pasado como parámetro.
+        Primero elimina investigadores asociados, luego el semillero en sí.
+
+        Args:
+            semillero_id (int): ID del semillero a eliminar.
+
+        Returns:
+            bool: True si se borró el semillero (al menos una fila afectada), False en caso contrario.
+        """
+        # 1) Eliminar TODOS los investigadores cuyo semillero_id coincide:
+        query_investigadores = """
+            DELETE FROM investigadores
+            WHERE semillero_id = ?
+        """
+        try:
+            # Ejecutamos el delete; asumimos que execute_query devuelve cursor o rowcount
+            self.db.execute_query(query_investigadores, (semillero_id,))
+        except Exception as e:
+            # Podrías loguear e ignorar (porque tal vez no haya investigadores asociados) o propagar el error
+            # Por simplicidad, lo imprimimos y seguimos
+            print(f"Advertencia al eliminar investigadores asociados: {e}")
+
+        # 2) Ahora eliminamos el semillero:
+        query_semillero = """
+            DELETE FROM semilleros
+            WHERE semillero_id = ?
+        """
+        try:
+            resultado = self.db.execute_query(query_semillero, (semillero_id,))
+            # Dependiendo de tu implementación de execute_query:
+            # - Si retorna rowcount: usar `return resultado > 0`
+            # - Si retorna None pero ejecuta commit, hacemos luego un SELECT para revisar
+            if isinstance(resultado, int):
+                return (resultado > 0)
+            else:
+                # Si tu execute_query no devuelve rowcount, puedes ejecutar:
+                # cursor = self.db.execute_query(query_semillero, (semillero_id,))
+                # return cursor.rowcount > 0
+                return True
+        except Exception as e:
+            print(f"Error al eliminar el semillero: {e}")
+            return False
 
     def obtener_todos(self):
         """Obtiene todos los semilleros de investigación
@@ -104,7 +197,7 @@ class SemilleroService:
         # Basado en la estructura, ajustamos la consulta
         # Suponiendo que la columna se llama 'objetivos' en lugar de 'objetivos_especificos'
         query = """
-                SELECT s.id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
+                SELECT s.semillero_id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
                 s.grupo_id, g.nombre as grupo_nombre, s.status
                 FROM semilleros s
                 LEFT JOIN grupos_investigacion g ON s.grupo_id = g.id
@@ -119,7 +212,7 @@ class SemilleroService:
             objetivos = json.loads(row['objetivos_especificos'])
 
             semillero = Semillero(
-                id=row['id'],
+                id=row['semillero_id'],
                 nombre=row['nombre'],
                 objetivo_principal=row['objetivo_principal'],
                 objetivos_especificos=objetivos,  # Mantenemos el nombre del atributo del objeto
@@ -146,11 +239,11 @@ class SemilleroService:
             Semillero: Objeto Semillero o None si no existe
         """
         query = """
-            SELECT s.id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
+            SELECT s.semillero_id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
                    s.grupo_id, s.status, g.nombre as grupo_nombre
             FROM semilleros s
             JOIN grupos_investigacion g ON s.grupo_id = g.id
-            WHERE s.id = ?
+            WHERE s.semillero_id = ?
         """
 
         row = self.db.execute_query(query, (semillero_id,), fetch='one')
@@ -262,3 +355,6 @@ class SemilleroService:
             semilleros.append(semillero)
 
         return semilleros
+    
+
+    
