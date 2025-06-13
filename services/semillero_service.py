@@ -97,7 +97,7 @@ class SemilleroService:
 
     # ... tus otros métodos (obtener_todos, crear_semillero, eliminar_semillero, etc.) ...
 
-    def editar_semillero(self, semillero_id, nombre, objetivo_principal, objetivos_especificos, grupo_id, status):
+    def editar_semillero(self, semillero_id, nombre, objetivo_principal, objetivos_especificos, grupo_id):
         """
         Actualiza los campos de un semillero existente en la base de datos.
         - semillero_id (int): ID del semillero a actualizar.
@@ -117,8 +117,7 @@ class SemilleroService:
             SET nombre = ?,
                 objetivo_principal = ?,
                 objetivos_especificos = ?,
-                grupo_id = ?,
-                status = ?
+                grupo_id = ?
             WHERE semillero_id = ?;
         """
         params = (
@@ -126,7 +125,6 @@ class SemilleroService:
             objetivo_principal,
             objetivos_json,
             grupo_id,
-            status,
             semillero_id
         )
         try:
@@ -255,7 +253,7 @@ class SemilleroService:
         objetivos = json.loads(row['objetivos_especificos'])
 
         semillero = Semillero(
-            id=row['id'],
+            id=row['semillero_id'],
             nombre=row['nombre'],
             objetivo_principal=row['objetivo_principal'],
             objetivos_especificos=objetivos,
@@ -327,7 +325,7 @@ class SemilleroService:
             list: Lista de objetos Semillero
         """
         query = """
-            SELECT s.id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
+            SELECT s.semillero_id, s.nombre, s.objetivo_principal, s.objetivos_especificos, 
                    s.grupo_id, s.status, g.nombre as grupo_nombre
             FROM semilleros s
             JOIN grupos_investigacion g ON s.grupo_id = g.id
@@ -343,7 +341,7 @@ class SemilleroService:
             objetivos = json.loads(row['objetivos_especificos'])
 
             semillero = Semillero(
-                id=row['id'],
+                id=row['semillero_id'],
                 nombre=row['nombre'],
                 objetivo_principal=row['objetivo_principal'],
                 objetivos_especificos=objetivos,
@@ -355,6 +353,98 @@ class SemilleroService:
             semilleros.append(semillero)
 
         return semilleros
-    
 
-    
+    def activar_semillero(self, semillero_id):
+        """Activa un semillero después de que su entregable haya sido aprobado
+
+        Args:
+            semillero_id (int): ID del semillero a activar
+
+        Returns:
+            bool: True si se activó correctamente, False en caso contrario
+        """
+        query = """
+            UPDATE semilleros 
+            SET status = 'activo'
+            WHERE semillero_id = ? 
+            AND EXISTS (
+                SELECT 1 FROM entregables 
+                WHERE semillero_id = ? 
+                AND estado = 'aprobado'
+            )
+        """
+
+        try:
+            result = self.db.execute_query(query, (semillero_id, semillero_id))
+            if result:
+                print(f"\nSemillero activado exitosamente.")
+                return True
+            else:
+                print("\nNo se pudo activar el semillero. Verifique que el entregable esté aprobado.")
+                return False
+        except Exception as e:
+            print(f"\nError al activar el semillero: {e}")
+            return False
+
+    def obtener_tutores(self):
+        """Obtiene todos los tutores registrados en el sistema"""
+        query = """
+            SELECT DISTINCT i.* 
+            FROM investigadores i 
+            WHERE i.tipo = 'tutor'
+            ORDER BY i.nombre
+        """
+        resultados = self.db.execute_query(query, fetch='all')
+        return [Investigador(
+            id=r['id'],
+            nombre=r['nombre'],
+            tipo='tutor',
+            email=r['email'],
+            semillero_id=r['semillero_id']
+        ) for r in resultados]
+
+    def obtener_estudiantes(self):
+        """Obtiene todos los estudiantes registrados en el sistema"""
+        query = """
+            SELECT DISTINCT i.* 
+            FROM investigadores i 
+            WHERE i.tipo = 'estudiante'
+            ORDER BY i.nombre
+        """
+        resultados = self.db.execute_query(query, fetch='all')
+        return [Investigador(
+            id=r['id'],
+            nombre=r['nombre'],
+            tipo='estudiante',
+            email=r['email'],
+            semillero_id=r['semillero_id']
+        ) for r in resultados]
+
+    def agregar_investigador(self, investigador):
+        """Agrega un nuevo investigador al sistema"""
+        query = """
+            INSERT INTO investigadores (nombre, tipo, email)
+            VALUES (?, ?, ?)
+        """
+        try:
+            investigador_id = self.db.execute_query(
+                query,
+                (investigador.nombre, investigador.tipo, investigador.email)
+            )
+            return True, "Investigador agregado correctamente"
+        except Exception as e:
+            return False, f"Error al agregar investigador: {str(e)}"
+
+    def asignar_investigador_semillero(self, investigador_id, semillero_id):
+        """Asigna un investigador a un semillero"""
+        query = """
+            UPDATE investigadores 
+            SET semillero_id = ?
+            WHERE id = ?
+        """
+        try:
+            self.db.execute_query(query, (semillero_id, investigador_id))
+            return True, "Investigador asignado correctamente al semillero"
+        except Exception as e:
+            return False, f"Error al asignar investigador: {str(e)}"
+

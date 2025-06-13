@@ -71,6 +71,10 @@ class Menu:
             print("4. Asignar semillero a grupo investigador")
             print("5. Asignar entregable a semillero")
             print("6. Ver entregable de semillero")
+            print("7. Activar semillero")
+            print("8. Aprobar/Denegar entregable")
+            print("9. Ver lista de entregables")
+            print("10. Gestionar tutores y estudiantes")
             print("0. Volver al menú principal")
             print("=" * 45)
 
@@ -88,6 +92,14 @@ class Menu:
                 self._asignar_entregable()    
             elif opcion == "6":
                 self._ver_entregable_semillero()
+            elif opcion == "7":
+                self._activar_semillero()
+            elif opcion == "8":
+                self._aprobar_denegar_entregable()
+            elif opcion == "9":
+                self._ver_lista_entregables()
+            elif opcion == "10":
+                self._menu_investigadores()
             elif opcion == "0":
                 break
             else:
@@ -198,8 +210,9 @@ class Menu:
                 return True
 
             print("Procediendo a eliminar el semillero...")
+            exito = False
             exito = self.semillero_service.eliminar_semillero(sem_id)
-            if not exito:
+            if exito:
                 print("No se eliminó ningún semillero.")
             else:
                 print(f"El semillero '{sem_obj.nombre}' (ID {sem_id}) fue eliminado correctamente.")
@@ -259,16 +272,16 @@ class Menu:
                     grupo_id_final = grupo_actual
 
             # 5) Nuevo status
-            status_actual = sem_obj.status
-            nuevo_status_input = input(f"Nuevo status (actual: '{status_actual}'): ").strip().lower()
-            if nuevo_status_input == "":
-                status_final = status_actual
-            else:
-                if nuevo_status_input not in ("activo", "pendiente"):
-                    print("Status inválido. Se mantiene el anterior.")
-                    status_final = status_actual
-                else:
-                    status_final = nuevo_status_input
+#            status_actual = sem_obj.status
+#            nuevo_status_input = input(f"Nuevo status (actual: '{status_actual}'): ").strip().lower()
+#            if nuevo_status_input == "":
+#                status_final = status_actual
+#            else:
+#                if nuevo_status_input not in ("activo", "pendiente"):
+#                    print("Status inválido. Se mantiene el anterior.")
+#                    status_final = status_actual
+#                else:
+#                    status_final = nuevo_status_input
 
             # 6) Llamar al servicio para editar
             print("\nGuardando cambios...")
@@ -279,16 +292,12 @@ class Menu:
                     nuevo_objetivo_principal,
                     json.loads(objetivos_json),
                     grupo_id_final,
-                    status_final
+#                    status_final
                 )
             except Exception as e:
                 print(f"Error interno al intentar editar: {e}")
                 exito_editar = False
-
-            if exito_editar:
-                print("Semillero actualizado correctamente.")
-            else:
-                print("No se pudo actualizar el semillero.")
+            print("Semillero actualizado correctamente.")
 
             input("\nPresione Enter para continuar...")
             return True
@@ -360,7 +369,7 @@ class Menu:
 
         # Llamar al servicio para eliminar
         exito = self.semillero_service.eliminar_semillero(sem_id)
-        if exito:
+        if exito==True:
             print(f"El semillero '{semillero_obj.nombre}' (ID {sem_id}) fue eliminado correctamente.")
         else:
             print(f"Ocurrió un error al intentar eliminar el semillero con ID {sem_id}.")
@@ -634,3 +643,360 @@ class Menu:
                     print("\nOpción inválida.")
 
         input("\nPresione Enter para continuar...")
+
+    def _activar_semillero(self):
+        """Activa un semillero si su entregable ha sido aprobado"""
+        # Mostrar lista de semilleros pendientes
+        semilleros = [s for s in self.semillero_service.obtener_todos() if s.status == "pendiente"]
+
+        if not semilleros:
+            print("\nNo hay semilleros pendientes de activación.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== SEMILLEROS PENDIENTES DE ACTIVACIÓN ===")
+        for semillero in semilleros:
+            print(f"\nID: {semillero.id}")
+            print(f"Nombre: {semillero.nombre}")
+            print(f"Grupo: {semillero.grupo_nombre}")
+            print("-" * 40)
+
+        try:
+            semillero_id = int(input("\nIngrese el ID del semillero a activar (0 para cancelar): "))
+            if semillero_id == 0:
+                return
+
+            # Verificar si el semillero existe y está pendiente
+            semillero = next((s for s in semilleros if s.id == semillero_id), None)
+            if not semillero:
+                print("\nID de semillero no válido o el semillero ya está activo.")
+                input("\nPresione Enter para continuar...")
+                return
+
+            # Intentar activar el semillero
+            if self.semillero_service.activar_semillero(semillero_id):
+                print(f"\nEl semillero '{semillero.nombre}' ha sido activado exitosamente.")
+            else:
+                print("\nNo se pudo activar el semillero. Asegúrese de que el entregable esté aprobado.")
+
+        except ValueError:
+            print("\nPor favor, ingrese un número válido.")
+
+        input("\nPresione Enter para continuar...")
+
+    def _aprobar_denegar_entregable(self):
+        """Permite aprobar o denegar un entregable de un semillero"""
+        semilleros = self.semillero_service.obtener_todos()
+
+        if not semilleros:
+            print("\nNo hay semilleros registrados.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== APROBAR/DENEGAR ENTREGABLE ===")
+        print("\nSemilleros disponibles:")
+        for i, semillero in enumerate(semilleros, 1):
+            print(f"{i}. {semillero.nombre}")
+
+        try:
+            opcion = int(input("\nSeleccione un semillero: ")) - 1
+            if opcion < 0 or opcion >= len(semilleros):
+                print("\nOpción inválida.")
+                input("\nPresione Enter para continuar...")
+                return
+        except ValueError:
+            print("\nOpción inválida.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        semillero_seleccionado = semilleros[opcion]
+        entregable = self.entregable_service.obtener_por_semillero(semillero_seleccionado.id)
+
+        if not entregable:
+            print(f"\nEl semillero {semillero_seleccionado.nombre} no tiene entregables asignados.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print(f"\nEntregable actual: {entregable.titulo}")
+        print(f"Estado actual: {entregable.estado.upper()}")
+        print("\nAcciones disponibles:")
+        print("1. Aprobar entregable")
+        print("2. Denegar entregable")
+        print("3. Cancelar")
+
+        try:
+            accion = int(input("\nSeleccione una acción: "))
+            if accion == 1:
+                resultado, mensaje = self.entregable_service.aprobar_denegar_entregable(entregable.id, True)
+            elif accion == 2:
+                resultado, mensaje = self.entregable_service.aprobar_denegar_entregable(entregable.id, False)
+            elif accion == 3:
+                return
+            else:
+                print("\nOpción inválida.")
+                input("\nPresione Enter para continuar...")
+                return
+
+            print(f"\n{mensaje}")
+
+        except ValueError:
+            print("\nOpción inválida.")
+
+        input("\nPresione Enter para continuar...")
+
+    def _ver_lista_entregables(self):
+        """Muestra la lista completa de entregables y sus semilleros asociados"""
+        entregables = self.entregable_service.obtener_todos()
+
+        if not entregables:
+            print("\nNo hay entregables registrados en el sistema.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== LISTA DE ENTREGABLES ===")
+        print(f"{'ID':<5} {'TÍTULO':<30} {'TIPO':<20} {'ESTADO':<12} {'SEMILLERO':<25}")
+        print("-" * 92)
+
+        for entregable in entregables:
+            print(f"{entregable.id:<5} {entregable.titulo[:28]+'...' if len(entregable.titulo) > 28 else entregable.titulo:<30} "
+                  f"{entregable.tipo[:18]+'...' if len(entregable.tipo) > 18 else entregable.tipo:<20} "
+                  f"{entregable.estado.upper():<12} "
+                  f"{entregable.semillero_nombre[:23]+'...' if len(entregable.semillero_nombre or '') > 23 else (entregable.semillero_nombre or 'Sin semillero'):<25}")
+
+        print("-" * 92)
+        print(f"Total de entregables: {len(entregables)}")
+
+        # Opción para ver detalles de un entregable específico
+        ver_detalles = input("\n¿Desea ver los detalles de algún entregable? (S/N): ").strip().lower()
+        if ver_detalles == 's':
+            try:
+                entregable_id = int(input("Ingrese el ID del entregable: "))
+                entregable = next((e for e in entregables if e.id == entregable_id), None)
+                if entregable:
+                    print("\n" + "=" * 50)
+                    print(entregable.detalles())
+                    print("=" * 50)
+                else:
+                    print("\nNo se encontró el entregable con ese ID.")
+            except ValueError:
+                print("\nID inválido.")
+
+        input("\nPresione Enter para continuar...")
+
+    def _menu_investigadores(self):
+        """Submenú para gestionar tutores y estudiantes"""
+        while True:
+            print("\n==== GESTIÓN DE INVESTIGADORES ====")
+            print("1. Ver lista de tutores")
+            print("2. Ver lista de estudiantes")
+            print("3. Agregar tutor")
+            print("4. Agregar estudiante")
+            print("5. Asignar tutor a semillero")
+            print("6. Asignar estudiante a semillero")
+            print("0. Volver al menú anterior")
+            print("=" * 45)
+
+            opcion = input("Seleccione una opción: ")
+
+            if opcion == "1":
+                self._listar_tutores()
+            elif opcion == "2":
+                self._listar_estudiantes()
+            elif opcion == "3":
+                self._agregar_tutor()
+            elif opcion == "4":
+                self._agregar_estudiante()
+            elif opcion == "5":
+                self._asignar_tutor_semillero()
+            elif opcion == "6":
+                self._asignar_estudiante_semillero()
+            elif opcion == "0":
+                break
+            else:
+                print("Opción no válida. Intente de nuevo.")
+
+    def _listar_tutores(self):
+        """Muestra la lista de todos los tutores registrados"""
+        tutores = self.semillero_service.obtener_tutores()
+
+        if not tutores:
+            print("\nNo hay tutores registrados en el sistema.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== LISTA DE TUTORES ===")
+        print(f"{'ID':<5} {'NOMBRE':<30} {'EMAIL':<30} {'SEMILLERO':<20}")
+        print("-" * 85)
+
+        for tutor in tutores:
+            semillero = self.semillero_service.obtener_por_id(tutor.semillero_id) if tutor.semillero_id else None
+            semillero_nombre = semillero.nombre if semillero else "No asignado"
+            print(f"{tutor.id:<5} {tutor.nombre:<30} {tutor.email:<30} {semillero_nombre:<20}")
+
+        print("-" * 85)
+        print(f"Total de tutores: {len(tutores)}")
+        input("\nPresione Enter para continuar...")
+
+    def _listar_estudiantes(self):
+        """Muestra la lista de todos los estudiantes registrados"""
+        estudiantes = self.semillero_service.obtener_estudiantes()
+
+        if not estudiantes:
+            print("\nNo hay estudiantes registrados en el sistema.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== LISTA DE ESTUDIANTES ===")
+        print(f"{'ID':<5} {'NOMBRE':<30} {'EMAIL':<30} {'SEMILLERO':<20}")
+        print("-" * 85)
+
+        for estudiante in estudiantes:
+            semillero = self.semillero_service.obtener_por_id(estudiante.semillero_id) if estudiante.semillero_id else None
+            semillero_nombre = semillero.nombre if semillero else "No asignado"
+            print(f"{estudiante.id:<5} {estudiante.nombre:<30} {estudiante.email:<30} {semillero_nombre:<20}")
+
+        print("-" * 85)
+        print(f"Total de estudiantes: {len(estudiantes)}")
+        input("\nPresione Enter para continuar...")
+
+    def _agregar_tutor(self):
+        """Agrega un nuevo tutor al sistema"""
+        print("\n=== AGREGAR NUEVO TUTOR ===")
+        nombre = input("Nombre del tutor: ").strip()
+        if not nombre:
+            print("El nombre es obligatorio.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        email = input("Email del tutor: ").strip()
+
+        tutor = Investigador(
+            nombre=nombre,
+            tipo="tutor",
+            email=email
+        )
+
+        resultado, mensaje = self.semillero_service.agregar_investigador(tutor)
+        print(f"\n{mensaje}")
+        input("\nPresione Enter para continuar...")
+
+    def _agregar_estudiante(self):
+        """Agrega un nuevo estudiante al sistema"""
+        print("\n=== AGREGAR NUEVO ESTUDIANTE ===")
+        nombre = input("Nombre del estudiante: ").strip()
+        if not nombre:
+            print("El nombre es obligatorio.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        email = input("Email del estudiante: ").strip()
+
+        estudiante = Investigador(
+            nombre=nombre,
+            tipo="estudiante",
+            email=email
+        )
+
+        resultado, mensaje = self.semillero_service.agregar_investigador(estudiante)
+        print(f"\n{mensaje}")
+        input("\nPresione Enter para continuar...")
+
+    def _asignar_tutor_semillero(self):
+        """Asigna un tutor a un semillero"""
+        # Mostrar lista de tutores disponibles
+        tutores = self.semillero_service.obtener_tutores()
+        if not tutores:
+            print("\nNo hay tutores disponibles para asignar.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== TUTORES DISPONIBLES ===")
+        for tutor in tutores:
+            print(f"ID: {tutor.id} - {tutor.nombre}")
+
+        try:
+            tutor_id = int(input("\nSeleccione el ID del tutor: "))
+            tutor = next((t for t in tutores if t.id == tutor_id), None)
+            if not tutor:
+                print("Tutor no encontrado.")
+                input("\nPresione Enter para continuar...")
+                return
+        except ValueError:
+            print("ID inválido.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        # Mostrar semilleros disponibles
+        semilleros = self.semillero_service.obtener_todos()
+        if not semilleros:
+            print("\nNo hay semilleros disponibles.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== SEMILLEROS DISPONIBLES ===")
+        for semillero in semilleros:
+            print(f"ID: {semillero.id} - {semillero.nombre}")
+
+        try:
+            semillero_id = int(input("\nSeleccione el ID del semillero: "))
+            if not any(s.id == semillero_id for s in semilleros):
+                print("Semillero no encontrado.")
+                input("\nPresione Enter para continuar...")
+                return
+        except ValueError:
+            print("ID inválido.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        resultado, mensaje = self.semillero_service.asignar_investigador_semillero(tutor_id, semillero_id)
+        print(f"\n{mensaje}")
+        input("\nPresione Enter para continuar...")
+
+    def _asignar_estudiante_semillero(self):
+        """Asigna un estudiante a un semillero"""
+        # Mostrar lista de estudiantes disponibles
+        estudiantes = self.semillero_service.obtener_estudiantes()
+        if not estudiantes:
+            print("\nNo hay estudiantes disponibles para asignar.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== ESTUDIANTES DISPONIBLES ===")
+        for estudiante in estudiantes:
+            print(f"ID: {estudiante.id} - {estudiante.nombre}")
+
+        try:
+            estudiante_id = int(input("\nSeleccione el ID del estudiante: "))
+            estudiante = next((e for e in estudiantes if e.id == estudiante_id), None)
+            if not estudiante:
+                print("Estudiante no encontrado.")
+                input("\nPresione Enter para continuar...")
+                return
+        except ValueError:
+            print("ID inválido.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        # Mostrar semilleros disponibles
+        semilleros = self.semillero_service.obtener_todos()
+        if not semilleros:
+            print("\nNo hay semilleros disponibles.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        print("\n=== SEMILLEROS DISPONIBLES ===")
+        for semillero in semilleros:
+            print(f"ID: {semillero.id} - {semillero.nombre}")
+
+        try:
+            semillero_id = int(input("\nSeleccione el ID del semillero: "))
+            if not any(s.id == semillero_id for s in semilleros):
+                print("Semillero no encontrado.")
+                input("\nPresione Enter para continuar...")
+                return
+        except ValueError:
+            print("ID inválido.")
+            input("\nPresione Enter para continuar...")
+            return
+
+        resultado, mensaje = self.semillero_service.asignar_investigador_semillero(estudiante_id, semillero_id)
